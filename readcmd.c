@@ -5,7 +5,10 @@
 #include <errno.h>
 #include <limits.h>
 
+#include "readcmd.h"
 #include "mem_alloc.h"
+#include "frees.h"
+#include "parsing_tools.h"
 
 #define BUFF_SIZE 16
 
@@ -60,7 +63,7 @@ char *readline(char *prompt)
  *
  * Return: a list of strings containing the words in @line
 */
-static char *split_in_words(char *line)
+static char **split_in_words(char *line)
 {
 	char **tab = NULL, *delimiters = " \t&><|", *token, *del_str;
 	size_t l = 0;
@@ -96,6 +99,43 @@ static char *split_in_words(char *line)
 }
 
 /**
+ * parse_special -
+ * @s: the cmdline structure that holds the information
+ * @w: the current word being read
+ * @words: the list of words in the command line
+ * @seq: the sequemce of commands to execute
+ * @idx: in the list of words
+ * @cmd_len: the length of the current command
+ * @seq_len: the number of commands currently parsed
+ */
+
+void parse_special(struct cmdline *s, char *w, char **words, char ***seq, int *idx, size_t cmd_len, size_t *seq_len) {
+    switch (w[0])
+    {
+        case '<':
+            parse_in(s, words, *idx);
+            s->in = words[(*idx)++];
+            break;
+        case '>':
+            /* Tricky : the word can only be ">" */
+            parse_out(s, words, *idx);
+            s->out = words[(*idx)++];
+            break;
+        case '&':
+            parse_bg(s, words, *idx, cmd_len);
+            s->bg = 1;
+            break;
+        case '|':
+            parse_pipe(s, words, *idx, cmd_len);
+            update_seq(seq, seq_len);
+
+            cmd = guarded_malloc(sizeof(char *));
+            cmd[0] = 0;
+            cmd_len = 0;
+            break;
+    }
+}
+/**
  * parsecmd - parses the commands passed in the command line
  * @pline:  the line read from the stdin
  *
@@ -103,7 +143,7 @@ static char *split_in_words(char *line)
  */
 struct cmdline *parsecmd(char **pline)
 {
-	char *line = *pline, char **cmd, char ***seq, *w;
+	char *line = *pline, char **cmd, **words, char ***seq, *w;
 	struct cmdline *s;
 	int i = 0;
 	size_t cmd_len = 0 seq_len = 0;
@@ -123,15 +163,15 @@ struct cmdline *parsecmd(char **pline)
 	seq[0] = NULL;
 	words = split_in_words(line);
 	init_cmdline(s);
-	while ((w = word[i++]) != 0)
+	while ((w = words[i++]) != 0)
 	{
 		if (strchr("<>|&", w[0]))
-			handle_special(w, words[i]);
+			parse_special(s, w, words, seq, &i, cmd_len, &seq_len);
 		else
-			update_cmd(cmd, cmd_len);
+			update_cmd(cmd, &cmd_len);
 	}
 	if (cmd_len != 0)
-		update_seq(seq, seq_len);
+		update_seq(seq, *seq_len);
 	else if (seq_len != 0)
 	{
 		s->err = "misplaced pipe";

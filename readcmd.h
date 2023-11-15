@@ -18,4 +18,7 @@ struct cmdline
 	const char *err;
 }
 
+char *readline(char *prompt);
+struct cmdline *parsecmd(char **pline);
+
 #endif
